@@ -1,5 +1,6 @@
 from __future__ import annotations
-import json, hashlib, time
+import json, hashlib, time, re
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 import pandas as pd
@@ -96,3 +97,20 @@ def validate_bundle(bundle: dict[str, Any]) -> list[str]:
 def local_image_path(image_id: str) -> Path | None:
     candidates = [ROOT / "assets" / "product_images" / f"{image_id}.jpg", DATA_DIR / "images" / f"{image_id}.jpg"]
     return next((p for p in candidates if p.exists()), None)
+
+
+@lru_cache(maxsize=1)
+def drive_image_map() -> dict[str, str]:
+    folder_url = _config()["images"]["folder_url"]
+    folder_id = folder_url.split("/folders/")[1].split("?")[0]
+    html = requests.get(f"https://drive.google.com/drive/folders/{folder_id}?usp=drive_link", timeout=60).text
+    pattern = re.compile(r'aria-label="([0-9]{10}\.jpg) Image Shared".*?data-id="([A-Za-z0-9_-]+)"', re.S)
+    return dict(pattern.findall(html))
+
+
+def image_url(image_id: str) -> str | None:
+    path = local_image_path(image_id)
+    if path:
+        return str(path)
+    file_id = drive_image_map().get(f"{image_id}.jpg")
+    return f"https://drive.google.com/thumbnail?id={file_id}&sz=w800" if file_id else None
