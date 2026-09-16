@@ -16,7 +16,7 @@
     "three_tower_model": {"file_id": "176xsrLEBpdvbwhltCAQsxXoBeRMtzLi2", "filename": "three_tower_model.pt", "required": true},
     "visual_features": {"file_id": "12-yPa1Nr7QRkdErgOfRE-dHnl-tXWoZQ", "filename": "visual_features.npy", "required": true},
     "semantic_features": {"file_id": "13xAMTUUbQ1uA-T-JHjsPSEnw3QEa9wWu", "filename": "semantic_features.npy", "required": true},
-    "lda_article_index": {"file_id": "", "filename": "lda_article_index.csv", "required": true},
+    "lda_article_index": {"file_id": "", "filename": "lda_article_index.csv", "required": false},
     "prices": {"file_id": "", "filename": "article_prices.csv", "required": false}
   },
   "images": {
