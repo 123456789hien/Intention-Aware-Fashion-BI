@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 import plotly.express as px
-from .data_loader import load_bundle, validate_bundle, local_image_path, sync_from_drive
+from .data_loader import load_bundle, validate_bundle, image_url, sync_from_drive
 from .intention_engine import taxonomy, add_intention_label, demand_supply_gap, catalog_supply
 from .customer_engine import profile, top_intentions, customer_ids
 from .recommendation_engine import artifact_status, can_infer, explain_unavailable
@@ -50,8 +50,8 @@ def product_card(row, score=None):
     article = str(row.article_id)
     image_id = None
     if "image_id" in row.index and pd.notna(row.image_id): image_id = str(row.image_id)
-    path = local_image_path(image_id) if image_id else None
-    if path: st.image(str(path), use_container_width=True)
+    path = image_url(image_id) if image_id else None
+    if path: st.image(path, use_container_width=True)
     else: st.info("Image asset not available in the supplied local image folder.")
     st.markdown(f"**{row.get('prod_name', 'Unnamed product')}**")
     st.caption(f"Article {article} · {row.get('product_type_name', 'Product type unavailable')}")
