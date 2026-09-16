@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.streamlit/secrets.toml
+.DS_Store
+
+# Data and model artifacts are downloaded from Google Drive at deployment/runtime.
+data/*.csv
+data/*.json
+data/*.npy
+data/*.pt
+data/images/
+models/
+
+# Local caches
+.cache/
+.pytest_cache/
