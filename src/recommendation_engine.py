@@ -1,13 +1,14 @@
 from __future__ import annotations
 from pathlib import Path
 import pandas as pd
-from .data_loader import ROOT
+from .data_loader import ROOT, _config
 
 REQUIRED = ["three_tower_model.pt", "visual_features.npy", "semantic_features.npy"]
 
 
 def artifact_status() -> dict[str, bool]:
-    return {name: (ROOT / "models" / name).exists() or (ROOT / "data" / name).exists() for name in REQUIRED}
+    configured = {item["filename"]: bool(item.get("file_id")) for item in _config()["sources"].values()}
+    return {name: (ROOT / "models" / name).exists() or (ROOT / "data" / name).exists() or configured.get(name, False) for name in REQUIRED}
 
 
 def can_infer() -> bool:
