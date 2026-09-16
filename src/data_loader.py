@@ -30,6 +30,9 @@ def sync_from_drive(timeout: int = 90, force: bool = False) -> dict[str, str]:
         if not file_id:
             status[key] = "missing_file_id"
             continue
+        if key in {"three_tower_model", "visual_features", "semantic_features"} and not force:
+            status[key] = "deferred_until_artifact_request"
+            continue
         if dest.exists() and not force:
             status[key] = f"cached:{dest.stat().st_size}"
             continue
