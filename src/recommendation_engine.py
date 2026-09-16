@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 from .data_loader import ROOT
 
-REQUIRED = ["three_tower_model.pt", "visual_features.npy", "semantic_features.npy", "lda_article_index.csv"]
+REQUIRED = ["three_tower_model.pt", "visual_features.npy", "semantic_features.npy"]
 
 
 def artifact_status() -> dict[str, bool]:
@@ -11,12 +11,17 @@ def artifact_status() -> dict[str, bool]:
 
 
 def can_infer() -> bool:
-    return all(artifact_status().values())
+    # The supplied Drive package has no lda_article_index.csv. The arrays are full-population
+    # features, while the app catalog is a sample. Without a verified article-to-row mapping,
+    # producing a score would be unsafe even when the three binary artifacts exist.
+    return False
 
 
 def explain_unavailable() -> str:
     missing = [n for n, ok in artifact_status().items() if not ok]
-    return "Actual Three-Tower inference is locked because these thesis artifacts are missing: " + ", ".join(missing)
+    if missing:
+        return "Actual Three-Tower inference is locked because these thesis artifacts are missing: " + ", ".join(missing)
+    return "Actual Three-Tower inference is locked because the supplied package has no verified article-to-feature row mapping. No lda_article_index.csv is required or assumed."
 
 
 def rank_with_actual_model(*args, **kwargs) -> pd.DataFrame:
