@@ -4,7 +4,7 @@ An end-to-end prototype accompanying the Master's thesis **"Deep
 Learning-Driven Business Intelligence for Personalized Fashion Retail:
 Integrating Intention Analytics and Recommendation System"** (Do Thi Hien,
 2026) — bringing the **Three-Tower Neural Network** architecture to life as
-an interactive web app, built with [Streamlit](https://streamlit.io).
+an interactive web app, built with [(https://streamlit.io](https://share.streamlit.io/)](https://share.streamlit.io/).
 
 **➡️ Live demo:** `https://<your-app-name>.streamlit.app` (fill in after deploying)
 
