@@ -1,73 +1,132 @@
-# Intention-Aware Fashion BI
+# Intention-Aware Fashion Recommender — Prototype Demo
 
-A Streamlit business-intelligence application for the H&M fashion thesis. The application connects purchase-intention profiling, product intelligence, customer segmentation, catalogue representation and Three-Tower model evidence.
+An end-to-end prototype accompanying the Master's thesis **"Deep
+Learning-Driven Business Intelligence for Personalized Fashion Retail:
+Integrating Intention Analytics and Recommendation System"** (Do Thi Hien,
+2026) — bringing the **Three-Tower Neural Network** architecture to life as
+an interactive web app, built with [Streamlit](https://streamlit.io).
 
-> The system moves fashion recommendation from understanding **what** customers buy to understanding **why** they buy.
+**➡️ Live demo:** `https://<your-app-name>.streamlit.app` (fill in after deploying)
 
-## Data integrity policy
+---
 
-This repository does not contain demo rows, random values or simulated recommendation scores. At runtime, `src/data_loader.py` downloads the supplied CSV/JSON files from Google Drive using the file IDs in `config/data_sources.json`. The app validates keys and probability columns before rendering.
+## The business value this project addresses
 
-The recommendation page fails closed until the exact trained artifacts are supplied:
+Traditional fashion e-commerce recommenders answer *"what does the customer
+buy"* and *"who is the customer"* well, but miss *"why does the customer
+buy"* — the real motivation behind the purchase decision. This app visually
+demonstrates how a third tower, accounting for just **0.2% of total model
+parameters**, produces a measurable **+3.52% AUC** improvement — especially
+strong in segments with narrow, well-defined shopping intentions (baby care,
+personal intimate wear, professional menswear) — while also generating
+Business Intelligence outputs (intention-based segmentation, supply-demand
+gap reporting, personalisation budget prioritisation) that feed directly
+into buying and marketing decisions.
 
-- `three_tower_model.pt`
-- `visual_features.npy`
-- `semantic_features.npy`
-- `lda_article_index.csv`
+## App structure
 
-Those artifacts are intentionally not invented. They must be added to `config/data_sources.json` with their real Google Drive file IDs, or placed in the configured runtime data/model directories. The inference preprocessing must also be verified against the training notebook before enabling scores.
+| Page | Content | Corresponding thesis chapter |
+|---|---|---|
+| 🏠 Home | Overview, business value | Abstract, Chapter 1 |
+| 🛍️ Product Catalog | Browse products by 10 shopping-intention groups, with real images | Chapter 4.2 (Intention Discovery) |
+| 🎯 Recommendation Demo | Compare Three-Tower vs Two-Tower, with Hadamard-alignment explanations | Chapter 4.5 (Comparative Evaluation) |
+| 📊 Business Intelligence | Segmentation, supply-demand gap, investment priority | Chapter 5 |
+| ℹ️ Methodology | Model architecture, data source, sampling method | Chapter 3, Appendix |
 
-The supplied metadata does not currently include product prices. The application therefore displays `Price unavailable in supplied Google Drive data`; it never fabricates a price. Add a real `article_prices.csv` only when the business data owner provides one.
+## Data architecture — why code (GitHub) and data (Google Drive) are separated
 
-## Run locally
+```
+GitHub repo (code, <5MB)          Google Drive (1 file: data_export.zip, ~120-150MB)
+├── app.py                        ├── articles_sample.csv
+├── pages/                        ├── visual_features_sample.npy
+├── utils/                        ├── semantic_features_sample.npy
+├── requirements.txt              ├── demo_personas.csv
+└── .streamlit/                   ├── three_tower_best.pt / two_tower_best.pt
+                                   └── images/*.jpg  (~5,300 images, resized to 400px)
+        │                                    │
+        └──────── app downloads & extracts on startup ──┘
+                   (utils/data_loader.py: gdown.download + zipfile, cached once)
+```
+
+Product images are resized to a maximum of 400px on the longest edge
+(Script 01, Step 6b) — a ~96% size reduction (1.5GB → 55MB) with no loss of
+usable display quality, since ResNet-50 (Chapter 3) itself only uses
+224×224px images when extracting visual features.
+
+Data is a **stratified 5% sample per dominant intention** — the exact same
+method and rate validated in thesis Section 11 (distribution deviation
+MAD ≤ 0.0036pp from the true population). See
+[`01_sample_and_export.py`](../01_sample_and_export.py) and
+[`02_DRIVE_UPLOAD_GUIDE.md`](../02_DRIVE_UPLOAD_GUIDE.md) at the project
+root for how this sample was created.
+
+## Running locally
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
+git clone https://github.com/<your-username>/<your-repo>.git
+cd <your-repo>
 pip install -r requirements.txt
+
+mkdir -p .streamlit
+cp .streamlit/secrets.toml.example .streamlit/secrets.toml
+# Open .streamlit/secrets.toml and paste your real GDRIVE_FILE_ID
+
 streamlit run app.py
 ```
 
-On first run, the app downloads configured Drive files into `data/`. Do not commit downloaded datasets, images or model artifacts; `.gitignore` excludes them.
+The first run will automatically download the dataset from Google Drive
+into a `data/` folder (1–3 minutes depending on connection speed); later
+runs reuse the cache.
 
-## Streamlit Cloud
+## Deploy to Streamlit Community Cloud
 
-1. Push this repository to GitHub.
-2. Create a Streamlit app with `app.py` as the main file.
-3. Use Python 3.11 if available.
-4. Add the dependencies from `requirements.txt`.
-5. Ensure the deployed environment can reach the shared Google Drive files.
-6. Add the real model and feature file IDs to `config/data_sources.json` only after they are available.
+1. Push the code (without `data/`, already excluded by `.gitignore`) to GitHub.
+2. Go to [share.streamlit.io](https://share.streamlit.io) → **New app**.
+3. Select your repo, branch `main`, main file path: `app.py`.
+4. Before deploying, open **Advanced settings → Secrets** and paste:
+   ```toml
+   GDRIVE_FILE_ID = "1AbCdEfGhIjKlMnOpQrStUvWxYz"
+   ```
+   (The File ID of `data_export.zip` — a single zip file, not a folder ID —
+   see `02_DRIVE_UPLOAD_GUIDE.md` at the project root.)
+5. Click **Deploy**. Watch the logs — the first cold start will take a few
+   minutes while `gdown` downloads the dataset from Drive; subsequent visits
+   (same live container) will be fast thanks to `st.cache_resource`.
 
-For large model/feature files, use an approved external artifact store or a secure deployment secret rather than GitHub history. Never commit the full H&M image dataset or customer-level files to a public repository.
+## System requirements
 
-## Pages
+- Python 3.10+
+- See `requirements.txt` (PyTorch CPU-only is sufficient for inference — no GPU needed)
 
-- **Executive Overview:** thesis KPIs and relative demand-versus-catalogue representation.
-- **Customer Intelligence:** customer intention distribution, confidence and cold-start visibility.
-- **Intention Analytics:** intention-level product explorer with product cards and image fallback status.
-- **Product & Assortment:** catalogue intelligence and product metadata explorer.
-- **AI Personalised Recommendation:** exact Three-Tower artifact gate; no fallback ranking is used.
-- **Model Performance:** supplied offline model comparison and business interpretation.
+## Directory structure
 
-## Important interpretation limits
-
-Supply–demand gap is a relative comparison of customer intention share and catalogue share in the analytical sample. It is not an inventory shortage, revenue forecast or causal business effect. Offline AUC improvement is not evidence of revenue uplift without a future online experiment.
-
-## Repository structure
-
-```text
-fashion-intention-bi/
-├── app.py
-├── pages/
-├── src/
-│   ├── data_loader.py
-│   ├── customer_engine.py
-│   ├── intention_engine.py
-│   ├── recommendation_engine.py
-│   └── ui.py
-├── config/data_sources.json
-├── requirements.txt
-├── .streamlit/config.toml
-└── README.md
 ```
+app/
+├── app.py                        # Home page
+├── requirements.txt
+├── .gitignore
+├── .streamlit/
+│   ├── config.toml               # Theme
+│   └── secrets.toml.example
+├── utils/
+│   ├── data_loader.py            # Downloads & caches data from Google Drive
+│   ├── models.py                 # Three-Tower / Two-Tower architecture
+│   └── recommender.py            # Recommendation logic + explanations
+└── pages/
+    ├── 1_Product_Catalog.py
+    ├── 2_Recommendation_Demo.py
+    ├── 3_Business_Intelligence.py
+    └── 4_About_Methodology.py
+```
+
+## Citation
+
+If you reference this prototype, please cite the original thesis:
+
+> Do, T. H. (2026). *Deep Learning-Driven Business Intelligence for
+> Personalized Fashion Retail: Integrating Intention Analytics and
+> Recommendation System* [Master's thesis, National Research University
+> Higher School of Economics].
+
+Dataset: H&M Group (2022). *H&M Personalized Fashion Recommendations*
+[Data set]. Kaggle.
