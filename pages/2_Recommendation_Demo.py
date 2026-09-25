@@ -33,7 +33,6 @@ download_data()
 st.title("🎯 Recommendation Demo: Three-Tower vs Two-Tower")
 
 articles = load_articles()
-profiles = load_article_intention_profiles()
 visual_feat, semantic_feat, art_feat_idx = load_feature_matrices()
 personas = load_demo_personas()
 intention_labels = load_intention_labels()
@@ -42,9 +41,7 @@ three_path, two_path = model_paths()
 three_model, two_model = load_models(three_path, two_path)
 
 intention_cols = [f"intention_{k}" for k in range(10)]
-articles_full = articles.merge(
-    profiles[["article_id"] + intention_cols], on="article_id", how="left"
-)
+articles_full = articles
 
 # ============================================================================
 # CHOOSE A USER
