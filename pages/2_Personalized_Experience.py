@@ -22,18 +22,23 @@ import plotly.express as px
 
 from utils.data_loader import (
     download_data, load_articles, load_feature_matrices, load_customer_validation,
-    load_customer_purchases, load_intention_labels, model_paths, image_path,
+    load_customer_purchases, load_intention_labels, load_monthly_trends, model_paths, image_path,
 )
 from utils.models import load_models
 from utils.recommender import score_catalog
-from utils.theme import inject_global_css, intention_color, intention_lens, render_sidebar_chrome, thin_rule, THREAD
+from utils.theme import (
+    inject_global_css, intention_color, intention_lens, render_sidebar_chrome,
+    render_period_selector, thin_rule, THREAD,
+)
 from utils.charts import intention_radar_chart
 from utils.thesis_data import segment_static, recommendation_text
+from utils.trends import filter_by_period
 
 st.set_page_config(page_title="Customer Validation", page_icon="✨", layout="wide")
 inject_global_css()
 download_data()
 render_sidebar_chrome()
+granularity, period, compare_mode = render_period_selector(load_monthly_trends())
 
 st.title("Customer Validation")
 st.caption(
@@ -143,11 +148,21 @@ st.markdown(accent_html, unsafe_allow_html=True)
 thin_rule()
 
 # ---- Real purchase history — loaded once, reused by every section below ----
-cust_purchases = purchases[purchases["customer_id"] == customer_id].copy()
+cust_purchases_all = purchases[purchases["customer_id"] == customer_id].copy()
+cust_purchases = filter_by_period(cust_purchases_all, "t_dat", granularity, period)
 purchased_articles = articles[articles["article_id"].isin(cust_purchases["article_id"])].copy()
 
+period_note = f"{granularity}: {period}" if period and granularity != "All time" else "All time"
+st.caption(
+    f"📅 Showing **{period_note}** — {len(cust_purchases)} of "
+    f"{len(cust_purchases_all)} total real purchases on record for this period."
+)
+
 if purchased_articles.empty:
-    st.warning("No transaction rows found for this customer in customer_purchases.csv.")
+    st.warning(
+        f"No real purchases for this customer in {period_note}. "
+        "Try a different period (or 'All time') in the sidebar."
+    )
     st.stop()
 
 # ============================================================================
