@@ -37,7 +37,7 @@ intention_labels = load_intention_labels()
 # ---- Header ----
 st.markdown(
     "<div style='font-family:Libre Caslon Display, serif; font-size:2rem;'>"
-    "Good morning, Merchandising &amp; Buying Team.</div>",
+    "Hi! Have a nice day..</div>",
     unsafe_allow_html=True,
 )
 period_str = f"{granularity}: **{period}**" if period else "*(upload monthly_segment_trends.csv to enable period reporting)*"
