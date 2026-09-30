@@ -10,7 +10,9 @@ score_catalog / explain_recommendation / tower_contribution_chart logic.
 
 import os
 import numpy as np
+import pandas as pd
 import streamlit as st
+import plotly.express as px
 
 from utils.data_loader import (
     download_data, load_articles, load_feature_matrices, load_demo_personas,
@@ -18,7 +20,7 @@ from utils.data_loader import (
 )
 from utils.models import load_models
 from utils.recommender import score_catalog, explain_recommendation
-from utils.theme import inject_global_css, intention_color, render_sidebar_chrome, thin_rule, alignment_badge, ALIGNMENT_STRONG_THRESHOLD
+from utils.theme import inject_global_css, intention_color, render_sidebar_chrome, thin_rule, alignment_badge, ALIGNMENT_STRONG_THRESHOLD, THREAD
 from utils.charts import tower_contribution_chart
 
 st.set_page_config(page_title="Recommendation Audit", page_icon="🧪", layout="wide")
@@ -82,27 +84,60 @@ if result_key in st.session_state:
     m2.metric("Avg. Two-Tower score", f"{top['two_tower_score'].mean():.3f}")
     m3.metric("Average delta", f"{top['score_delta'].mean():+.3f}")
     m4.metric("Strong intention matches", f"{n_strong}/{len(top)}")
-    st.caption(
-        "⚠️ Individual items can have a negative delta even though Three-Tower "
-        "wins on average (+3.52% AUC over 544,178 test interactions, thesis "
-        "Table 4.6). With a small sample (a handful of top-ranked items, all "
-        "already scoring 0.90+), differences shrink toward the score ceiling "
-        "and can flip sign — this matches McNemar's test (Table 4.9): in "
-        "35.5% of cases where the two models disagree, Two-Tower is actually "
-        "correct. Increase the slider above or try a different persona to see "
-        "the aggregate advantage emerge more clearly.\n\n"
-        "🎯 **Strong intention match** = Hadamard alignment score ≥ 0.10 — the "
-        "product's own dominant intention genuinely overlaps this persona's "
-        "profile. Below that, the recommendation is driven mainly by Tower 1 "
-        "(visual) and Tower 2 (semantic), with Tower 3 close to neutral — "
-        "this is expected: Tower 3 only activates strongly for products that "
-        "truly match the shopper's motivation, not every item in the feed."
-    )
+
+    with st.expander("ℹ️ Why can individual deltas be negative?"):
+        st.caption(
+            "Three-Tower wins on average (+3.52% AUC, thesis Table 4.6), but "
+            "individual items near the score ceiling (0.90+) can flip sign — "
+            "consistent with McNemar's test (Table 4.9): Two-Tower is actually "
+            "correct in 35.5% of disagreements. **Strong intention match** = "
+            "Hadamard alignment ≥ 0.10 — Tower 3 only activates strongly for "
+            "products that truly match this shopper's motivation."
+        )
+
+    # ---- Overview charts: the "shape" of this audit, before the detail list ----
+    st.markdown("##### At a glance")
+    chart_col1, chart_col2 = st.columns(2)
+
+    with chart_col1:
+        cmp_df = top[["prod_name", "three_tower_score", "two_tower_score"]].copy()
+        cmp_df["prod_name"] = cmp_df["prod_name"].astype(str).str[:22]
+        cmp_long = cmp_df.melt(id_vars="prod_name", var_name="Model", value_name="Score")
+        cmp_long["Model"] = cmp_long["Model"].map({"three_tower_score": "Three-Tower", "two_tower_score": "Two-Tower"})
+        fig_cmp = px.bar(
+            cmp_long, x="Score", y="prod_name", color="Model", orientation="h", barmode="group",
+            color_discrete_map={"Three-Tower": THREAD, "Two-Tower": "#8A8578"},
+            title="Score by product",
+        )
+        fig_cmp.update_layout(height=max(220, 32 * len(top)), margin=dict(l=10, r=10, t=30, b=10),
+                               yaxis_title="", legend_title="")
+        st.plotly_chart(fig_cmp, use_container_width=True, config={"displayModeBar": False})
+
+    with chart_col2:
+        avg_t1, avg_t2, avg_t3 = top["tower1_mag"].mean(), top["tower2_mag"].mean(), top["tower3_mag"].mean()
+        fig_avg = tower_contribution_chart(avg_t1, avg_t2, avg_t3)
+        fig_avg.update_layout(title="Average tower contribution (this feed)", height=220,
+                               margin=dict(l=10, r=10, t=30, b=10))
+        st.plotly_chart(fig_avg, use_container_width=True, config={"displayModeBar": False})
+
+        match_counts = pd.DataFrame({
+            "Type": ["🎯 Strong intention match", "🖼️ Visual/semantic only"],
+            "Count": [n_strong, len(top) - n_strong],
+        })
+        fig_match = px.bar(
+            match_counts, x="Count", y="Type", orientation="h",
+            color="Type", color_discrete_map={
+                "🎯 Strong intention match": "#5B7065", "🖼️ Visual/semantic only": "#8A8578",
+            },
+        )
+        fig_match.update_layout(showlegend=False, height=140, margin=dict(l=10, r=10, t=10, b=10), yaxis_title="")
+        st.plotly_chart(fig_match, use_container_width=True, config={"displayModeBar": False})
 
     sort_by_alignment = st.checkbox("Sort by intention-alignment strength (instead of score)", value=False)
     display_df = top.sort_values("top_alignment_value", ascending=False) if sort_by_alignment else top
 
     thin_rule()
+    st.markdown("##### Item-by-item detail")
     for _, product in display_df.iterrows():
         badge_label, badge_color = alignment_badge(product["top_alignment_value"])
         img_col, text_col, chart_col = st.columns([1, 2, 2])
