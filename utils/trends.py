@@ -112,6 +112,48 @@ def _shift_period(period: str, granularity: str, mode: str) -> str | None:
         return None
 
 
+def filter_by_period(df: pd.DataFrame, date_col: str, granularity: str, period) -> pd.DataFrame:
+    """Filters any transaction-level DataFrame (must have a YYYY-MM-DD date
+    column) down to the chosen reporting period. granularity="All time" (or
+    period=None) returns the unfiltered df — used by pages that reuse the
+    shared sidebar period selector but apply it to raw transactions rather
+    than the pre-aggregated monthly_segment_trends.csv."""
+    if granularity == "All time" or period is None or df.empty:
+        return df
+    ym = df[date_col].astype(str).str[:7]
+    if granularity == "Month":
+        return df[ym == period]
+    elif granularity == "Quarter":
+        return df[ym.apply(_month_to_quarter) == period]
+    else:  # Year
+        return df[ym.apply(_month_to_year) == period]
+
+
+def period_to_date_range(granularity: str, period: str):
+    """Converts a (granularity, period) selection into a real [start, end]
+    date range for filtering raw transaction rows (t_dat). Returns
+    (None, None) for "All time" or when no period is selected — callers
+    should treat that as "no date filter, use everything"."""
+    if granularity == "All time" or period is None:
+        return None, None
+    try:
+        if granularity == "Month":
+            start = pd.Timestamp(f"{period}-01")
+            end = start + pd.offsets.MonthEnd(0)
+        elif granularity == "Quarter":
+            year, q = int(period[:4]), int(period[-1])
+            start_month = (q - 1) * 3 + 1
+            start = pd.Timestamp(year=year, month=start_month, day=1)
+            end = start + pd.offsets.QuarterEnd(0)
+        else:  # Year
+            year = int(period)
+            start = pd.Timestamp(year=year, month=1, day=1)
+            end = pd.Timestamp(year=year, month=12, day=31)
+        return start, end
+    except (ValueError, IndexError):
+        return None, None
+
+
 def segment_comparison(agg_df: pd.DataFrame, period: str, granularity: str, mode: str) -> pd.DataFrame:
     """
     For each of the 10 segments, returns current-period revenue_share_pct,
