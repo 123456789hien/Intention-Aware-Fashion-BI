@@ -108,6 +108,7 @@ with radar_col:
         st.plotly_chart(
             intention_radar_chart(vec, intention_labels),
             use_container_width=True, config={"displayModeBar": False},
+            key=f"segdetail_radar_{k}",
         )
         st.caption(f"Persona confidence: {rep['confidence']:.2f} · {int(rep['n_purchases'])} historical purchases")
     else:
@@ -146,7 +147,7 @@ with trend_col:
                 xaxis_title=granularity, yaxis_title="Revenue share (%)",
                 margin=dict(l=10, r=10, t=10, b=10), height=300, showlegend=False,
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, key=f"segdetail_trend_{k}_{granularity}")
             st.caption(
                 f"Aggregated to {granularity.lower()} level, matching the sidebar selector. "
                 "The red star marks the period currently selected."
