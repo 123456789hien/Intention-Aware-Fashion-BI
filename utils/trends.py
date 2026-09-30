@@ -154,6 +154,29 @@ def period_to_date_range(granularity: str, period: str):
         return None, None
 
 
+def aggregate_units_share(df: pd.DataFrame, granularity: str) -> pd.DataFrame:
+    """Demand share based on UNITS (transaction count) — the same
+    methodology as thesis Table 5.2 (purchase-count based, not
+    revenue-weighted) — but recomputed for the chosen period instead of
+    being fixed to the all-time figure. granularity="All time" collapses
+    across the entire 25-month range (should closely match Table 5.2 as a
+    sanity check)."""
+    if df.empty:
+        return df
+    if granularity == "All time":
+        agg = df.groupby("intention").agg(units=("units", "sum"), n_customers=("n_customers", "sum")).reset_index()
+        total = agg["units"].sum()
+        agg["demand_share_pct"] = (agg["units"] / total * 100).round(4)
+        return agg
+    col = GRANULARITY_COL[granularity]
+    agg = df.groupby([col, "intention"]).agg(
+        units=("units", "sum"), n_customers=("n_customers", "sum")
+    ).reset_index()
+    totals = agg.groupby(col)["units"].transform("sum")
+    agg["demand_share_pct"] = (agg["units"] / totals * 100).round(4)
+    return agg
+
+
 def segment_comparison(agg_df: pd.DataFrame, period: str, granularity: str, mode: str) -> pd.DataFrame:
     """
     For each of the 10 segments, returns current-period revenue_share_pct,
