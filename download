@@ -1,0 +1,16 @@
+# Data downloaded at runtime from Google Drive — never commit
+data/
+data_export/
+*.zip
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Streamlit secrets (local dev only — real secrets live in Streamlit Cloud UI)
+.streamlit/secrets.toml
+
+# OS / editor
+.DS_Store
+.vscode/
