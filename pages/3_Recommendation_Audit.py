@@ -18,17 +18,22 @@ import plotly.express as px
 
 from utils.data_loader import (
     download_data, load_articles, load_feature_matrices, load_demo_personas,
-    load_intention_labels, model_paths, image_path,
+    load_intention_labels, load_monthly_trends, load_customer_purchases, model_paths, image_path,
 )
 from utils.models import load_models
 from utils.recommender import score_catalog, explain_recommendation
-from utils.theme import inject_global_css, intention_color, render_sidebar_chrome, thin_rule, alignment_badge, ALIGNMENT_STRONG_THRESHOLD, THREAD
+from utils.theme import (
+    inject_global_css, intention_color, render_sidebar_chrome, render_period_selector,
+    thin_rule, alignment_badge, ALIGNMENT_STRONG_THRESHOLD, THREAD,
+)
 from utils.charts import tower_contribution_chart
+from utils.trends import filter_by_period
 
 st.set_page_config(page_title="Recommendation Audit", page_icon="🧪", layout="wide")
 inject_global_css()
 download_data()
 render_sidebar_chrome()
+granularity, period, compare_mode = render_period_selector(load_monthly_trends())
 
 st.title("Recommendation Engine Audit")
 st.caption(
@@ -39,6 +44,7 @@ st.caption(
 
 articles = load_articles()
 personas = load_demo_personas()
+purchases = load_customer_purchases()
 intention_labels = load_intention_labels()
 
 # ---- Segment selection only — no persona filter needed ----
@@ -53,8 +59,42 @@ if len(seg_personas) == 0:
     st.warning("No personas available for this segment to audit.")
     st.stop()
 
+# ---- Period-aware activity filter — count each persona's REAL purchases in
+#      the selected period; personas inactive in that period are excluded
+#      from this run (their scoring profile is still all-time, see caption). ----
+period_note = f"{granularity}: {period}" if period and granularity != "All time" else "All time"
+activity_rows = []
+for _, p_row in seg_personas.iterrows():
+    cid = p_row["customer_id"]
+    cid_purchases = purchases[purchases["customer_id"] == cid]
+    cid_purchases_period = filter_by_period(cid_purchases, "t_dat", granularity, period)
+    activity_rows.append({"customer_id": cid, "n_in_period": len(cid_purchases_period)})
+activity_df = pd.DataFrame(activity_rows)
+seg_personas = seg_personas.merge(activity_df, on="customer_id", how="left")
+
+active_personas = seg_personas[seg_personas["n_in_period"] > 0].reset_index(drop=True)
+n_excluded = len(seg_personas) - len(active_personas)
+
+st.caption(
+    f"📅 Period: **{period_note}** — {len(active_personas)}/{len(seg_personas)} "
+    f"personas had at least 1 real purchase in this window"
+    + (f" ({n_excluded} excluded for this run)." if n_excluded else ".")
+)
+st.caption(
+    "ℹ️ The period filter selects WHICH personas were active in that window "
+    "(by real purchase count) — it does not recompute their intention "
+    "profile, which remains the all-time Bayesian estimate (Section 3.4.5). "
+    "Recomputing a period-specific profile would need re-running the "
+    "Bayesian pipeline itself."
+)
+
+if len(active_personas) == 0:
+    st.warning("No personas in this segment had a real purchase in this period. Try 'All time' or a different period.")
+    st.stop()
+
+seg_personas = active_personas
 top_n = st.slider("Recommendations to inspect per persona", 4, 16, 8, step=4)
-st.caption(f"Will run for all {len(seg_personas)} real personas in this segment.")
+st.caption(f"Will run for all {len(seg_personas)} active personas in this segment/period.")
 
 if st.button("Run audit", type="primary"):
     three_path, two_path = model_paths()
@@ -75,14 +115,16 @@ if st.button("Run audit", type="primary"):
         top = top.copy()
         top["persona_label"] = p_row["persona_label"]
         top["customer_id"] = p_row["customer_id"]
+        top["n_in_period"] = p_row["n_in_period"]
         all_results.append(top)
         progress.progress((i + 1) / len(seg_personas), text=f"Scored {i+1}/{len(seg_personas)} personas...")
     progress.empty()
 
     st.session_state[f"audit_result_{k}"] = pd.concat(all_results, ignore_index=True)
+    st.session_state[f"audit_period_{k}"] = period_note
 
 result_key = f"audit_result_{k}"
-if result_key in st.session_state:
+if result_key in st.session_state and st.session_state.get(f"audit_period_{k}") == period_note:
     pooled = st.session_state[result_key]
     n_strong = int((pooled["top_alignment_value"] >= ALIGNMENT_STRONG_THRESHOLD).sum())
 
@@ -157,7 +199,8 @@ if result_key in st.session_state:
         avg_delta=("score_delta", "mean"),
         strong_matches=("top_alignment_value", lambda s: int((s >= ALIGNMENT_STRONG_THRESHOLD).sum())),
         n_items=("article_id", "count"),
-    ).reset_index().rename(columns={"persona_label": "Persona"})
+        purchases_in_period=("n_in_period", "first"),
+    ).reset_index().rename(columns={"persona_label": "Persona", "purchases_in_period": f"Purchases ({period_note})"})
     st.dataframe(summary_table, use_container_width=True, hide_index=True)
 
     thin_rule()
@@ -168,7 +211,7 @@ if result_key in st.session_state:
         persona_display = f"{group['persona_label'].iloc[0]} · id {customer_id_val[-6:]}"
         with st.expander(f"{persona_display} ({len(group)} items)"):
             display_df = group.sort_values("top_alignment_value", ascending=False) if sort_by_alignment else group
-            for _, product in display_df.iterrows():
+            for item_pos, (_, product) in enumerate(display_df.iterrows()):
                 badge_label, badge_color = alignment_badge(product["top_alignment_value"])
                 img_col, text_col, chart_col = st.columns([1, 2, 2])
                 with img_col:
@@ -189,8 +232,8 @@ if result_key in st.session_state:
                     tf = tower_contribution_chart(product["tower1_mag"], product["tower2_mag"], product["tower3_mag"])
                     st.plotly_chart(
                         tf, use_container_width=True, config={"displayModeBar": False},
-                        key=f"audit_tower_{customer_id_val}_{product['article_id']}",
+                        key=f"audit_tower_{customer_id_val}_{product['article_id']}_{item_pos}",
                     )
                 thin_rule()
 else:
-    st.info(f"Click **Run audit** to score all {len(seg_personas)} personas in this segment.")
+    st.info(f"Click **Run audit** to score all {len(seg_personas)} active personas in this segment/period.")
