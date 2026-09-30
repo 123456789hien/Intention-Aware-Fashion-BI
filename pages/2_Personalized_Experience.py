@@ -32,13 +32,15 @@ from utils.theme import (
 )
 from utils.charts import intention_radar_chart
 from utils.thesis_data import segment_static, recommendation_text
-from utils.trends import filter_by_period
+from utils.trends import with_period_columns, aggregate_period, filter_by_period
 
 st.set_page_config(page_title="Customer Validation", page_icon="✨", layout="wide")
 inject_global_css()
 download_data()
 render_sidebar_chrome()
-granularity, period, compare_mode = render_period_selector(load_monthly_trends())
+monthly_df_raw = load_monthly_trends()
+monthly_df = with_period_columns(monthly_df_raw)
+granularity, period, compare_mode = render_period_selector(monthly_df_raw)
 
 st.title("Customer Validation")
 st.caption(
@@ -83,41 +85,62 @@ if choice == "All customers":
     )
     thin_rule()
 
+    period_label = period if (period and granularity != "All time") else "all time"
+    agg = aggregate_period(monthly_df, granularity)
+    period_customers_by_k = {}
+    if not agg.empty:
+        if granularity == "All time":
+            for _, r in agg.iterrows():
+                period_customers_by_k[int(r["intention"])] = int(r["n_customers"])
+        else:
+            from utils.trends import GRANULARITY_COL
+            col = GRANULARITY_COL[granularity]
+            for _, r in agg[agg[col] == period].iterrows():
+                period_customers_by_k[int(r["intention"])] = int(r["n_customers"])
+
     rows = []
     for k in range(10):
         s = segment_static(k)
         rows.append({
-            "T": k, "name": intention_labels[str(k)]["name"], "users": s["users"],
+            "T": k, "name": intention_labels[str(k)]["name"],
+            "users": period_customers_by_k.get(k, 0),
             "share": s["user_share"], "confidence": s["confidence"], "gap": s["gap"],
         })
     seg_df = pd.DataFrame(rows)
     seg_df["label"] = seg_df.apply(lambda r: f"T{r['T']} — {r['name']}", axis=1)
     seg_df["color"] = seg_df["T"].apply(intention_color)
 
-    st.subheader("How many customers per intention segment?")
+    st.subheader(f"Customers active per intention segment — {period_label}")
     fig = px.bar(
         seg_df.sort_values("users"), x="users", y="label", orientation="h",
         color="label", color_discrete_map=dict(zip(seg_df["label"], seg_df["color"])),
-        labels={"users": "Number of customers", "label": ""},
+        labels={"users": f"Customers active ({period_label})", "label": ""},
     )
     fig.update_layout(showlegend=False)
     st.plotly_chart(fig, use_container_width=True, key="custval_all_bar")
 
-    st.subheader("Customer count vs. average confidence, by segment")
+    st.subheader(f"Customers active ({period_label}) vs. all-time avg. confidence, by segment")
     fig2 = px.scatter(
         seg_df, x="confidence", y="users", size="users", color="label",
         color_discrete_map=dict(zip(seg_df["label"], seg_df["color"])),
-        labels={"confidence": "Avg. profile confidence", "users": "Customers"},
+        labels={"confidence": "Avg. profile confidence (all-time)", "users": f"Customers active ({period_label})"},
         size_max=60,
     )
     st.plotly_chart(fig2, use_container_width=True, key="custval_all_scatter")
 
     st.dataframe(
         seg_df[["label", "users", "share", "confidence", "gap"]].rename(columns={
-            "label": "Segment", "users": "Customers", "share": "% of base",
-            "confidence": "Avg. confidence", "gap": "Supply-demand gap (pp)",
+            "label": "Segment", "users": f"Customers ({period_label})", "share": "% of base (all-time)",
+            "confidence": "Avg. confidence (all-time)", "gap": "Supply-demand gap (pp, all-time)",
         }),
         use_container_width=True, hide_index=True,
+    )
+    st.caption(
+        f"Customer counts above are recomputed for **{period_label}** from real "
+        f"transactions. Confidence and the supply-demand gap remain all-time "
+        f"figures (Table 5.1/5.2) — they are per-customer/catalogue profile "
+        f"estimates, not something logged per transaction, so they cannot be "
+        f"time-sliced the same way."
     )
     st.caption(
         f"Validation sample available for individual lookup: "
