@@ -46,13 +46,20 @@ choice = st.selectbox("Segment", options, index=default_k)
 k = int(choice.split("—")[0].strip()[1:])
 accent = intention_color(k)
 
-seg_personas = personas[personas["dominant_intention"] == k]
+seg_personas = personas[personas["dominant_intention"] == k].reset_index(drop=True)
 if len(seg_personas) == 0:
     st.warning("No persona available for this segment to audit.")
     st.stop()
 
-persona_label = st.selectbox("Persona", seg_personas["persona_label"].tolist(), key=f"audit_persona_{k}")
-persona_row = seg_personas[seg_personas["persona_label"] == persona_label].iloc[0]
+# customer_id suffix guarantees a unique label even when confidence/n_purchases
+# coincide across different real customers (common in small segments) — the
+# raw persona_label alone was not always unique, which silently broke the
+# dropdown->row lookup below.
+seg_personas["display_label"] = seg_personas.apply(
+    lambda r: f"{r['persona_label']} · id {r['customer_id'][-6:]}", axis=1
+)
+persona_label = st.selectbox("Persona", seg_personas["display_label"].tolist(), key=f"audit_persona_{k}")
+persona_row = seg_personas[seg_personas["display_label"] == persona_label].iloc[0]
 
 top_n = st.slider("Number of recommendations to inspect", 4, 16, 8, step=4)
 
@@ -92,7 +99,11 @@ if result_key in st.session_state:
             "consistent with McNemar's test (Table 4.9): Two-Tower is actually "
             "correct in 35.5% of disagreements. **Strong intention match** = "
             "Hadamard alignment ≥ 0.10 — Tower 3 only activates strongly for "
-            "products that truly match this shopper's motivation."
+            "products that truly match this shopper's motivation.\n\n"
+            "Note: the two models are trained separately, so a strong match "
+            "doesn't guarantee Three-Tower wins that item — Tower 3's value "
+            "shows up as a rescue for items Tower 1+2 rate low, not a bonus "
+            "stacked on items Tower 1+2 already rate high."
         )
 
     # ---- Overview charts: the "shape" of this audit, before the detail list ----
