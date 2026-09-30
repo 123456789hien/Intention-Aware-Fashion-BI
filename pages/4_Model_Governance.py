@@ -64,10 +64,18 @@ validated in thesis Section 11. **Revenue and customer figures are NOT
 affected** — those are computed on the full population.
 """
 )
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 col1.metric("Total products", f"{report['total_population_articles']:,}")
-col2.metric("Products sampled", f"{report['total_sampled_articles']:,}")
-col3.metric("Mean Absolute Deviation", f"{report['mean_absolute_deviation_pp']:.4f}pp")
+col2.metric("Stratified 5% sample", f"{report['total_sampled_articles_stratified']:,}")
+col3.metric("+ from real customer purchases", f"+{report['extra_articles_from_real_purchases']:,}")
+col4.metric("Total in this console", f"{report['total_sampled_articles_final']:,}")
+st.caption(
+    "The stratified 5% covers general browsing; the extra articles ensure "
+    "every real purchase in the Customer Validation page can be scored, "
+    "even if it wasn't part of the original 5% draw."
+)
+col5, = st.columns(1)
+col5.metric("Mean Absolute Deviation (sample vs. population)", f"{report['mean_absolute_deviation_pp']:.4f}pp")
 
 with st.expander("Full sampling breakdown by segment"):
     per_intent_df = pd.DataFrame(report["per_intention"])
