@@ -20,7 +20,7 @@ from utils.theme import (
     inject_global_css, intention_color, render_sidebar_chrome, render_period_selector,
     status_badge, trend_arrow, thin_rule,
 )
-from utils.trends import with_period_columns, aggregate_period, segment_comparison
+from utils.trends import with_period_columns, aggregate_period, aggregate_units_share, segment_comparison
 from utils.thesis_data import segment_static, model_improvement
 
 st.set_page_config(page_title="Intention Console | H&M", page_icon="🧵", layout="wide")
@@ -48,12 +48,13 @@ st.page_link(
     icon="✨",
 )
 st.caption(
-    "⚠️ Two independent metrics are shown per segment: the 🔴/🟡/🟢 status badge "
-    "uses the **transaction-count-based** supply-demand gap (Table 5.2, static "
-    "population figure). The ↑/↓ revenue trend uses **revenue-weighted** monthly "
-    "share for the selected period. The two can move in different directions — "
-    "e.g. a premium segment can have a small purchase-count share but a large "
-    "revenue share. Do not read them as the same number over time."
+    "⚠️ Two independent metrics are shown per segment, both recomputed for "
+    "the period you select: the 🔴/🟡/🟢 status badge uses the "
+    "**transaction-count-based** supply-demand gap (vs. the fixed catalogue "
+    "share — product mix doesn't change in this dataset). The ↑/↓ trend uses "
+    "**revenue-weighted** share instead. The two can move in different "
+    "directions — e.g. a premium segment can have a small purchase-count "
+    "share but a large revenue share. Do not read them as the same number."
 )
 
 comparison = None
@@ -86,6 +87,20 @@ if period:
 
 thin_rule()
 
+# Period-aware supply-demand gap (units-based, thesis Table 5.2 methodology,
+# recomputed for the selected period instead of the fixed all-time figure)
+units_agg = aggregate_units_share(monthly_df, granularity)
+period_gap_by_k = {}
+if not units_agg.empty:
+    if granularity == "All time":
+        for _, r in units_agg.iterrows():
+            period_gap_by_k[int(r["intention"])] = r["demand_share_pct"] - segment_static(int(r["intention"]))["cat_share"]
+    else:
+        from utils.trends import GRANULARITY_COL
+        col = GRANULARITY_COL[granularity]
+        for _, r in units_agg[units_agg[col] == period].iterrows():
+            period_gap_by_k[int(r["intention"])] = r["demand_share_pct"] - segment_static(int(r["intention"]))["cat_share"]
+
 # ---- Segment Wall: 10 cards, 5 per row ----
 cols_per_row = 5
 for row_start in range(0, 10, cols_per_row):
@@ -95,7 +110,8 @@ for row_start in range(0, 10, cols_per_row):
         with col:
             accent = intention_color(k)
             static = segment_static(k)
-            emoji, status_label, status_color = status_badge(static["gap"])
+            gap_value = period_gap_by_k.get(k, static["gap"])
+            emoji, status_label, status_color = status_badge(gap_value)
 
             delta_str = "—"
             if comparison is not None and k in comparison.index:
@@ -121,7 +137,7 @@ for row_start in range(0, 10, cols_per_row):
 
             st.markdown(
                 f"<div style='font-size:0.85rem; margin-top:4px;'>"
-                f"{emoji} {status_label} <span style='color:#8A8578'>(txn-count gap, Table 5.2)</span><br>"
+                f"{emoji} {status_label} <span style='color:#8A8578'>(txn-count gap, {granularity.lower()})</span><br>"
                 f"Revenue {delta_str} <span style='color:#8A8578'>(this period)</span><br>"
                 f"Model AUC gain: <b>+{model_improvement(k):.1f}%</b>"
                 f"</div>",
@@ -133,9 +149,9 @@ for row_start in range(0, 10, cols_per_row):
 
 thin_rule()
 st.caption(
-    "Revenue trend computed from real transaction dates grouped by each "
-    "product's dominant intention (Script 01 bonus step). Segment "
-    "population figures (users, confidence, catalogue gap) are computed on "
-    "the full 1.37M-customer population — Table 5.1/5.2. Model AUC gain — "
-    "Table 4.7. Product thumbnails are drawn from the 5% demo sample."
+    "Revenue trend and the supply-demand gap badge are both recomputed for "
+    "the period selected in the sidebar, from real transaction dates grouped "
+    "by each product's dominant intention. Model AUC gain is a fixed, "
+    "all-time model evaluation figure (Table 4.7) — it does not change with "
+    "the period selector. Product thumbnails are drawn from the 5% demo sample."
 )
