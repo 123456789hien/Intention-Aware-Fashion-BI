@@ -25,7 +25,9 @@ from utils.theme import (
     render_period_selector, status_badge, thin_rule,
 )
 from utils.charts import intention_radar_chart
-from utils.trends import with_period_columns, aggregate_period, segment_comparison, GRANULARITY_COL
+from utils.trends import (
+    with_period_columns, aggregate_period, aggregate_units_share, segment_comparison, GRANULARITY_COL,
+)
 from utils.thesis_data import segment_static, model_improvement, recommendation_text
 
 st.set_page_config(page_title="Segment Detail", page_icon="🔍", layout="wide")
@@ -65,7 +67,8 @@ st.markdown(
 )
 
 # ============================================================================
-# Period-aware summary — THIS block now actually uses the sidebar selector
+# Period-aware summary — every number below now reflects the sidebar
+# selection wherever the underlying data genuinely supports it.
 # ============================================================================
 agg = aggregate_period(monthly_df, granularity) if period else None
 seg_comparison_row = None
@@ -74,10 +77,38 @@ if agg is not None:
     if k in comp.index:
         seg_comparison_row = comp.loc[k]
 
+# Period-specific customer count & supply-demand gap — both computed fresh
+# from real transactions (monthly_segment_trends.csv), not the fixed
+# all-time Table 5.1/5.2 figures.
+units_agg = aggregate_units_share(monthly_df, granularity)
+period_row = None
+if not units_agg.empty:
+    if granularity == "All time":
+        match = units_agg[units_agg["intention"] == k]
+    else:
+        col = GRANULARITY_COL[granularity]
+        match = units_agg[(units_agg[col] == period) & (units_agg["intention"] == k)]
+    if len(match):
+        period_row = match.iloc[0]
+
+period_gap = (period_row["demand_share_pct"] - static["cat_share"]) if period_row is not None else None
+period_customers = int(period_row["n_customers"]) if period_row is not None else None
+period_emoji, period_status_label, _ = status_badge(period_gap) if period_gap is not None else (emoji, status_label, status_color)
+
 m1, m2, m3, m4 = st.columns(4)
-m1.metric("Customers in segment", f"{static['users']:,}", f"{static['user_share']:.2f}% of base")
-m2.metric("Avg. confidence", f"{static['confidence']:.4f}")
-m3.metric("Supply-demand gap (txn-count, Table 5.2)", f"{static['gap']:+.2f}pp", status_label)
+if period_customers is not None:
+    period_label = period if granularity != "All time" else "all time"
+    m1.metric(f"Customers active ({period_label})", f"{period_customers:,}")
+else:
+    m1.metric("Customers in segment", f"{static['users']:,}", f"{static['user_share']:.2f}% of base (all-time)")
+m2.metric("Avg. confidence (all-time)", f"{static['confidence']:.4f}",
+          help="Confidence is a per-customer, all-time Bayesian estimate (Section 3.4.5) — "
+               "it cannot be recomputed for a shorter period without re-running that pipeline.")
+if period_gap is not None:
+    m3.metric(f"Supply-demand gap, txn-count ({period if granularity != 'All time' else 'all time'})",
+              f"{period_gap:+.2f}pp", period_status_label)
+else:
+    m3.metric("Supply-demand gap (txn-count, Table 5.2)", f"{static['gap']:+.2f}pp", status_label)
 if seg_comparison_row is not None and seg_comparison_row["revenue_share_pct"] is not None:
     delta = seg_comparison_row["delta_pp"]
     delta_str = f"{delta:+.2f}pp vs {compare_mode.lower()}" if delta is not None else "no prior period"
@@ -86,10 +117,11 @@ else:
     m4.metric(f"Revenue share ({period or 'n/a'})", "—", "no data for this period")
 
 st.caption(
-    "The gap (m3) is transaction-count based (Table 5.2, static, unaffected "
-    "by the period selector). Revenue share (m4) and the chart below are "
-    f"revenue-weighted for the **{granularity.lower()} you selected in the "
-    "sidebar** — the two metrics are complementary, not the same number."
+    "Customers (m1) and the supply-demand gap (m3) are recomputed for the "
+    f"**{granularity.lower()} you selected** from real transactions — they "
+    "will change as you change the sidebar. Confidence (m2) is the one "
+    "figure that cannot be time-sliced: it is a per-customer, all-time "
+    "profile estimate, not something logged per transaction."
 )
 
 thin_rule()
